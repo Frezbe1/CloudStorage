@@ -13,7 +13,9 @@ import com.example.cloudstorage.security.JWTToken;
 import com.example.cloudstorage.util.CloudManager;
 
 import javax.transaction.Transactional;
+import java.io.ByteArrayInputStream;
 import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.nio.file.FileAlreadyExistsException;
 import java.time.Instant;
 import java.util.List;
@@ -34,6 +36,8 @@ public class CloudService {
     @Transactional()
     public boolean uploadFile(MultipartFile multipartFile, String fileName) {
         Optional<CloudFileEntity> cloudFile = getCloudFileEntity(fileName);
+        byte [] byteArr = multipartFile.getBytes();
+        long multLong = multipartFile.getSize();
         if (cloudFile.isPresent()) {
             log.info("Такой файл имеется в БД, начинаем переименовывать {}", fileName);
             String renameFile = fileName;
@@ -51,7 +55,7 @@ public class CloudService {
         log.info("Такого файла нет, можно начинать запись {}", fileName);
         CloudFileEntity cloudFileEntity = CloudFileEntity.builder()
                 .fileName(fileName)
-                .size(multipartFile.getSize())
+                .size(multLong)
                 .date(Instant.now())
                 .key(UUID.randomUUID())
                 .userEntity(
@@ -64,7 +68,7 @@ public class CloudService {
         if (cloudRepository.findById(cloudId).isPresent()) {
             log.info("Файл {} записан в БД под id '{}'", fileName, cloudId);
         }
-        if (!cloudManager.upload(multipartFile.getBytes(),
+        if (!cloudManager.upload(byteArr,
                 cloudFileEntity.getKey().toString(),
                 cloudFileEntity.getFileName())) {
             fileNotFound("Не получилось записать файл");
@@ -99,17 +103,15 @@ public class CloudService {
     @Transactional
     public CloudFileDto getFile(String fileName) {
         Optional<CloudFileEntity> cloudFile = getCloudFileEntity(fileName);
-        if (cloudFile.isPresent()) {
-            log.info("Файл {} найден на диске", fileName);
-            var resourceFromBd = cloudFile.map(cloudManager::getFile).get();
-            return CloudFileDto.builder()
-                    .fileName(fileName)
-                    .resource(resourceFromBd)
-                    .build();
-        } else {
+        if (!cloudFile.isPresent()) {
             fileNotFound("Файл не удалось найди в БД");
-            return null;
         }
+        log.info("Файл {} найден на диске", fileName);
+        var resourceFromBd = cloudFile.map(cloudManager::getFile).get();
+        return CloudFileDto.builder()
+                .fileName(fileName)
+                .resource(resourceFromBd)
+                .build();
     }
 
     @SneakyThrows
@@ -123,9 +125,9 @@ public class CloudService {
             fileAlreadyExists("Такой файл существует");
         }
         cloudRepository.findByIdAndRenameFileName(cloudFile.get().getId(), cloudFileDto.getFileName());
-//            if (getCloudFileEntity(cloudFileDto.getFileName()).isEmpty()) {
-//            fileNotFound("Не удалось переименовать файл в БД");
-//        }
+            if (getCloudFileEntity(cloudFileDto.getFileName()).isEmpty()) {
+            fileNotFound("Не удалось переименовать файл в БД");
+        }
         if (!cloudManager.renameFileTo(cloudFile.get(), cloudFileDto.getFileName())) {
             fileNotFound("Не удалось переименовать файл на сервере");
         }
@@ -145,18 +147,18 @@ public class CloudService {
     }
 
     private Optional<CloudFileEntity> getCloudFileEntity(String fileName) {
-//        int userId = jwtToken.getAuthenticatedUser().getId();
-//        log.info("Получаем ID пользователя по токену: {}", userId);
+        int userId = jwtToken.getAuthenticatedUser().getId();
+        log.info("Получаем ID пользователя по токену: {}", userId);
         log.info("Начинаем искать файл в БД: {}", fileName);
         return cloudRepository.findCloudFileEntityByFileName(fileName);
     }
 
-    private static void fileNotFound(String msg) throws FileNotFoundException {
+    private void fileNotFound(String msg) throws FileNotFoundException {
         log.error(msg);
         throw new FileNotFoundException(msg);
     }
 
-    private static void fileAlreadyExists(String msg) throws FileAlreadyExistsException {
+    private void fileAlreadyExists(String msg) throws FileAlreadyExistsException {
         log.error(msg);
         throw new FileAlreadyExistsException(msg);
     }

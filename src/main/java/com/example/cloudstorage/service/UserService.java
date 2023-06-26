@@ -32,8 +32,8 @@ public class UserService {
                 .orElseThrow(() -> new UsernameNotFoundException("Такого пользователя нет в базе данных"));
         log.info("Пользователь {} найден\n Его данные: {}", userDTO.getLogin(), userFound);
 
-////       шифруем пароли для заполнения БД
-//        encodePasswordFromBD();
+        //шифруем пароли для заполнения БД
+           encodePasswordFromBD();
 
         //проверяем закодированный пароль из БД
         if (passwordEncoder.matches(userDTO.getPassword(), userFound.getPassword())) {
